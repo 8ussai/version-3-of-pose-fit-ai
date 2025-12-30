@@ -1,30 +1,43 @@
 import numpy as np
-import mediapipe as mp
 
 class MediaPipePoseExtractor:
     """
-    يطلع Pose landmarks كـ features رقمية:
-    لكل فريم: (33 نقطة * 4 قيم x,y,z,visibility) = 132
+    يرجّع pose features طولها 132:
+    33 landmark * 4 (x,y,z,visibility)
+    إذا mediapipe غير متوفر أو فشل، يرجّع zeros.
     """
-    def __init__(self, static_image_mode=False, model_complexity=1, min_det=0.5, min_track=0.5):
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=static_image_mode,
-            model_complexity=model_complexity,
-            enable_segmentation=False,
-            min_detection_confidence=min_det,
-            min_tracking_confidence=min_track
-        )
+    def __init__(self):
+        self.ok = False
+        try:
+            import mediapipe as mp
+            self.mp = mp
+            self.pose = mp.solutions.pose.Pose(
+                static_image_mode=False,
+                model_complexity=1,
+                enable_segmentation=False,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+            self.ok = True
+        except Exception:
+            self.mp = None
+            self.pose = None
+            self.ok = False
 
-    def extract(self, rgb_frame):
-        # rgb_frame: HxWx3 uint8
-        res = self.pose.process(rgb_frame)
-        if not res.pose_landmarks:
-            return np.zeros((33, 4), dtype=np.float32)
-        lm = res.pose_landmarks.landmark
-        out = np.array([[p.x, p.y, p.z, p.visibility] for p in lm], dtype=np.float32)
-        return out  # (33,4)
+    def extract(self, frame_bgr) -> np.ndarray:
+        if not self.ok:
+            return np.zeros((132,), dtype=np.float32)
 
-    @staticmethod
-    def flatten(lm_33x4: np.ndarray) -> np.ndarray:
-        return lm_33x4.reshape(-1).astype(np.float32)  # (132,)
+        try:
+            # mediapipe بده RGB
+            frame_rgb = frame_bgr[..., ::-1]
+            res = self.pose.process(frame_rgb)
+            if not res.pose_landmarks:
+                return np.zeros((132,), dtype=np.float32)
+
+            feats = []
+            for lm in res.pose_landmarks.landmark:
+                feats.extend([lm.x, lm.y, lm.z, lm.visibility])
+            return np.array(feats, dtype=np.float32)
+        except Exception:
+            return np.zeros((132,), dtype=np.float32)
