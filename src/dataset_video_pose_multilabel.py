@@ -8,10 +8,16 @@ from torch.utils.data import Dataset
 from src.config import CLASSES, IMG_SIZE, SEQ_LEN, FPS_SAMPLE, SEED
 from src.mediapipe_pose import MediaPipePoseExtractor
 
+
+def _csv_key_from_class(cls_name: str) -> str:
+    # wrong position -> wrong_position
+    return cls_name.strip().replace(" ", "_")
+
+
 def read_labels_csv(csv_path: Path):
     """
     CSV format المتوقع:
-      filename, correct, fast, uncomplete, wrong position
+      filename, correct, fast, uncomplete, wrong_position
     القيم تكون 0/1.
     """
     items = []
@@ -28,7 +34,9 @@ def read_labels_csv(csv_path: Path):
 
             y = np.zeros((len(CLASSES),), dtype=np.float32)
             for i, cls in enumerate(CLASSES):
-                v = row.get(cls, "0")
+                # جرّب key بالunderscore أولاً، وبعدها الاسم الأصلي
+                key = _csv_key_from_class(cls)
+                v = row.get(key, row.get(cls, "0"))
                 try:
                     y[i] = float(v)
                 except Exception:
@@ -36,6 +44,7 @@ def read_labels_csv(csv_path: Path):
 
             items.append((fname, y))
     return items
+
 
 def split_by_videos(items, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, seed=SEED):
     rng = np.random.default_rng(seed)
@@ -45,17 +54,16 @@ def split_by_videos(items, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, seed=
     n = len(items)
     n_train = int(n * train_ratio)
     n_val = int(n * val_ratio)
-    n_test = n - n_train - n_val
 
     train_idx = idx[:n_train]
-    val_idx = idx[n_train:n_train+n_val]
-    test_idx = idx[n_train+n_val:]
+    val_idx = idx[n_train:n_train + n_val]
+    test_idx = idx[n_train + n_val:]
 
     train_items = [items[i] for i in train_idx]
     val_items = [items[i] for i in val_idx]
     test_items = [items[i] for i in test_idx]
-
     return train_items, val_items, test_items
+
 
 class VideoPoseMultiLabelDataset(Dataset):
     def __init__(self, videos_dir: Path, items, augment=False):
@@ -94,7 +102,7 @@ class VideoPoseMultiLabelDataset(Dataset):
                 frame_resized = cv2.resize(frame, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_AREA)
                 pose = self.pose_extractor.extract(frame_resized)
 
-                frames_rgb.append(frame_resized)  # BGR (لكن رح نحوله لاحقاً)
+                frames_rgb.append(frame_resized)  # BGR (بنحوّله لاحقاً)
                 poses.append(pose)
 
             frame_i += 1
@@ -115,8 +123,8 @@ class VideoPoseMultiLabelDataset(Dataset):
             # augment: خذ بداية عشوائية
             if self.augment and (len(frames_rgb) > SEQ_LEN):
                 start = np.random.randint(0, len(frames_rgb) - SEQ_LEN + 1)
-            frames_rgb = frames_rgb[start:start+SEQ_LEN]
-            poses = poses[start:start+SEQ_LEN]
+            frames_rgb = frames_rgb[start:start + SEQ_LEN]
+            poses = poses[start:start + SEQ_LEN]
         else:
             # pad بالتكرار آخر فريم
             pad_n = SEQ_LEN - len(frames_rgb)

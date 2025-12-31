@@ -29,9 +29,9 @@ SEED = 42
 # Training
 # =============================
 BATCH_SIZE = 8
-EPOCHS = 71
-LR = 1e-4
-WEIGHT_DECAY = 1e-4
+EPOCHS = 20
+LR = 5e-5
+WEIGHT_DECAY = 2e-4
 NUM_WORKERS = 0
 
 # Split
